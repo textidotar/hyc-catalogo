@@ -1,0 +1,37 @@
+name: Catalogo HyC diario
+on:
+  schedule:
+    - cron: '0 9 * * *'
+  workflow_dispatch:
+permissions:
+  contents: write
+jobs:
+  bajar:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Bajar catalogo de La Bodega HyC
+        run: |
+          python3 - <<'PY'
+          import json, urllib.request
+          base = "https://www.labodegahyc.store"
+          todos, pagina = [], 1
+          while pagina < 60:
+              req = urllib.request.Request(f"{base}/products.json?limit=250&page={pagina}", headers={"User-Agent": "Mozilla/5.0"})
+              with urllib.request.urlopen(req, timeout=60) as r:
+                  lote = json.load(r).get("products", [])
+              if not lote:
+                  break
+              todos += lote
+              pagina += 1
+          if len(todos) < 50:
+              raise SystemExit(f"Solo llegaron {len(todos)} productos; no se actualiza el archivo")
+          json.dump({"products": todos}, open("catalogo-hyc.json", "w", encoding="utf-8"), ensure_ascii=False)
+          print("Productos:", len(todos))
+          PY
+      - name: Guardar si hubo cambios
+        run: |
+          git config user.name "catalogo-bot"
+          git config user.email "catalogo-bot@users.noreply.github.com"
+          git add catalogo-hyc.json
+          git diff --cached --quiet || (git commit -m "Catalogo actualizado" && git push)
